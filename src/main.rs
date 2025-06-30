@@ -15,7 +15,7 @@ use serde::Serialize;
 use base64;
 
 use crate::res_output::{SuccessResponse, KeyPairResponse, TokenCreateResponse, AccountInfo};
-use crate::res_input::CreateTokenRequest;
+use crate::res_input::{CreateTokenRequest, MintTokenRequest};
 
 mod res_output;
 mod res_input;
@@ -49,14 +49,45 @@ async fn create_token(req: Json<CreateTokenRequest>) -> Result<Json<SuccessRespo
         req.decimals,
     ).map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    // Convert accounts to response format
     let accounts: Vec<AccountInfo> = instruction.accounts.iter().map(|acc| AccountInfo {
         pubkey: acc.pubkey.to_string(),
         is_signer: acc.is_signer,
         is_writable: acc.is_writable,
     }).collect();
 
-    // Create response
+    let response = TokenCreateResponse {
+        program_id: instruction.program_id.to_string(),
+        accounts,
+        instruction_data: base64::encode(instruction.data),
+    };
+
+    Ok(Json(SuccessResponse::new(response)))
+}
+
+#[handler]
+async fn mint_token(req: Json<MintTokenRequest>) -> Result<Json<SuccessResponse<TokenCreateResponse>>> {
+    let mint = Pubkey::from_str(&req.mint)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+    let destination = Pubkey::from_str(&req.destination)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+    let authority = Pubkey::from_str(&req.authority)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+
+    let instruction = token_instruction::mint_to(
+        &spl_token::id(),
+        &mint,
+        &destination,
+        &authority,
+        &[],
+        req.amount,
+    ).map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let accounts: Vec<AccountInfo> = instruction.accounts.iter().map(|acc| AccountInfo {
+        pubkey: acc.pubkey.to_string(),
+        is_signer: acc.is_signer,
+        is_writable: acc.is_writable,
+    }).collect();
+
     let response = TokenCreateResponse {
         program_id: instruction.program_id.to_string(),
         accounts,
@@ -68,12 +99,10 @@ async fn create_token(req: Json<CreateTokenRequest>) -> Result<Json<SuccessRespo
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-
     let app = Route::new()
-    .at("/keypair", post(handle_keypair))
-    .at("/create/token", post(create_token));
-
-
+        .at("/keypair", post(handle_keypair))
+        .at("/token/create", post(create_token))
+        .at("/token/mint", post(mint_token));
 
     Server::new(TcpListener::bind("127.0.0.1:3000"))
         .name("hello-world")
