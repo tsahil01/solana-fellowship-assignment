@@ -40,17 +40,8 @@ fn handle_keypair() -> Result<Json<SuccessResponse<KeyPairResponse>>> {
 
 #[handler]
 async fn create_token(req: Json<CreateTokenRequest>) -> Result<Json<SuccessResponse<TokenCreateResponse>>> {
-    if req.mintAuthority.is_empty() {
-        return Err(error_response("Mint authority empty"));
-    }
-    if req.mint.is_empty() {
-        return Err(error_response("Mint empty"));
-    }
-
-    let mint_authority = Pubkey::from_str(&req.mintAuthority)
-        .map_err(|e| error_response(&e.to_string()))?;
-    let mint = Pubkey::from_str(&req.mint)
-        .map_err(|e| error_response(&e.to_string()))?;
+    let mint_authority = validate_address(&req.mintAuthority, "mint authority")?;
+    let mint = validate_address(&req.mint, "mint")?;
     
     let instruction = token_instruction::initialize_mint(
         &spl_token::id(),
@@ -77,26 +68,13 @@ async fn create_token(req: Json<CreateTokenRequest>) -> Result<Json<SuccessRespo
 
 #[handler]
 async fn mint_token(req: Json<MintTokenRequest>) -> Result<Json<SuccessResponse<TokenCreateResponse>>> {
-    
-    if req.mint.is_empty() {
-        return Err(error_response("Mint empty"));
-    }
-    if req.destination.is_empty() {
-        return Err(error_response("Destination empty"));
-    }
-    if req.authority.is_empty() {
-        return Err(error_response("Authority empty"));
-    }
     if req.amount == 0 {
-        return Err(error_response("Amount 0"));
+        return Err(error_response("Invalid amount"));
     }
 
-    let mint = Pubkey::from_str(&req.mint)
-        .map_err(|e| error_response(&e.to_string()))?;
-    let destination = Pubkey::from_str(&req.destination)
-        .map_err(|e| error_response(&e.to_string()))?;
-    let authority = Pubkey::from_str(&req.authority)
-        .map_err(|e| error_response(&e.to_string()))?;
+    let mint = validate_address(&req.mint, "mint")?;
+    let destination = validate_address(&req.destination, "destination")?;
+    let authority = validate_address(&req.authority, "authority")?;
 
     let instruction = token_instruction::mint_to(
         &spl_token::id(),
@@ -127,7 +105,6 @@ async fn sign(req: Json<SignRequest>) -> Result<Json<SuccessResponse<SignRespons
     let message = &req.message;
     let secret = &req.secret;
 
-    
     if message.is_empty() {
         return Err(error_response("Message empty"));
     }
@@ -137,10 +114,10 @@ async fn sign(req: Json<SignRequest>) -> Result<Json<SuccessResponse<SignRespons
 
     let secret_bytes = bs58::decode(secret)
         .into_vec()
-        .map_err(|e| error_response(&format!("Invalid base58 string: {}", e)))?;
+        .map_err(|_| error_response("Invalid secret key"))?;
 
     let keypair = Keypair::from_bytes(&secret_bytes)
-        .map_err(|e| error_response(&format!("Invalid secret key: {}", e)))?;
+        .map_err(|_| error_response("Invalid secret key"))?;
 
     let signature = keypair.sign_message(message.as_bytes());
 
@@ -155,25 +132,20 @@ async fn sign(req: Json<SignRequest>) -> Result<Json<SuccessResponse<SignRespons
 
 #[handler]
 async fn verify(req: Json<VerifyRequest>) -> Result<Json<SuccessResponse<VerifyResponse>>> {
-    
     if req.message.is_empty() {
         return Err(error_response("Message empty"));
     }
     if req.signature.is_empty() {
         return Err(error_response("Signature empty"));
     }
-    if req.pubkey.is_empty() {
-        return Err(error_response("Public key empty"));
-    }
 
-    let pubkey = Pubkey::from_str(&req.pubkey)
-        .map_err(|e| error_response(&e.to_string()))?;
+    let pubkey = validate_address(&req.pubkey, "public key")?;
     
     let signature_bytes = base64::decode(&req.signature)
-        .map_err(|e| error_response(&format!("Invalid base64: {}", e)))?;
+        .map_err(|_| error_response("Invalid signature format"))?;
     
     let signature = Signature::try_from(signature_bytes.as_slice())
-        .map_err(|e| error_response(&format!("Invalid sign format: {}", e)))?;
+        .map_err(|_| error_response("Invalid signature"))?;
 
     let valid = signature.verify(&pubkey.as_ref(), req.message.as_bytes());
 
@@ -188,21 +160,12 @@ async fn verify(req: Json<VerifyRequest>) -> Result<Json<SuccessResponse<VerifyR
 
 #[handler]
 async fn send_sol(req: Json<SendSolRequest>) -> Result<Json<SuccessResponse<SendSolResponse>>> {
-    
-    if req.from.is_empty() {
-        return Err(error_response("From address empty"));
-    }
-    if req.to.is_empty() {
-        return Err(error_response("To address empty"));
-    }
     if req.lamports == 0 {
-        return Err(error_response("Lamports 0"));
+        return Err(error_response("Invalid amount"));
     }
 
-    let from = Pubkey::from_str(&req.from)
-        .map_err(|e| error_response(&e.to_string()))?;
-    let to = Pubkey::from_str(&req.to)
-        .map_err(|e| error_response(&e.to_string()))?;
+    let from = validate_address(&req.from, "from")?;
+    let to = validate_address(&req.to, "to")?;
 
     if from == to {
         return Err(error_response("From and to same"));
@@ -221,6 +184,21 @@ async fn send_sol(req: Json<SendSolRequest>) -> Result<Json<SuccessResponse<Send
     Ok(Json(SuccessResponse::new(response)))
 }
 
+fn validate_address(address: &str, field_name: &str) -> Result<Pubkey, poem::Error> {
+    if address.is_empty() {
+        return Err(error_response("Missing required fields"));
+    }
+    
+    match Pubkey::from_str(address) {
+        Ok(pubkey) => {
+            Ok(pubkey)
+        }
+        Err(_) => {
+            Err(error_response(&format!("Invalid {} address", field_name)))
+        }
+    }
+}
+
 fn error_response(message: &str) -> poem::Error {
     let error_response = ErrorResponse::new(message.to_string());
     poem::Error::from_response(Response::builder()
@@ -231,23 +209,13 @@ fn error_response(message: &str) -> poem::Error {
 
 #[handler]
 async fn send_token(req: Json<SendTokenRequest>) -> Result<Json<SuccessResponse<SendTokenResponse>>> {
-    
-    if req.destination.is_empty() {
-        return Err(error_response("Destination empty"));
-    }
-    if req.mint.is_empty() {
-        return Err(error_response("Mint empty"));
-    }
-    if req.owner.is_empty() {
-        return Err(error_response("Owner empty"));
-    }
     if req.amount == 0 {
-        return Err(error_response("Amount 0"));
+        return Err(error_response("Invalid amount"));
     }
 
-    let destination = Pubkey::from_str(&req.destination).map_err(|e| error_response(&e.to_string()))?;
-    let mint = Pubkey::from_str(&req.mint).map_err(|e| error_response(&e.to_string()))?;
-    let owner = Pubkey::from_str(&req.owner).map_err(|e| error_response(&e.to_string()))?;
+    let destination = validate_address(&req.destination, "destination")?;
+    let mint = validate_address(&req.mint, "mint")?;
+    let owner = validate_address(&req.owner, "owner")?;
 
     let source = get_associated_token_address(&owner, &mint);
 

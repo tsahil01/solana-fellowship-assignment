@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CreateTokenRequest {
     pub mintAuthority: String, 
     pub mint: String,
     pub decimals: u8,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct MintTokenRequest {
     pub mint: String,
     pub destination: String,
@@ -16,7 +16,7 @@ pub struct MintTokenRequest {
 }
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SignRequest {
     pub message: String,
     pub secret: String,
