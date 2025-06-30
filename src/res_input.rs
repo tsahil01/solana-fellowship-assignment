@@ -29,3 +29,18 @@ pub struct SendSolRequest {
     pub to: String,
     pub lamports: u64,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyRequest {
+    pub message: String,
+    pub signature: String,
+    pub pubkey: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendTokenRequest {
+    pub destination: String,
+    pub mint: String,
+    pub owner: String,
+    pub amount: u64,
+}

@@ -61,6 +61,27 @@ pub struct SignResponse {
 #[derive(Serialize, Deserialize)]
 pub struct SendSolResponse {
     pub program_id: String,
-    pub accounts: Vec<AccountInfo>,
+    pub accounts: Vec<String>,
+    pub instruction_data: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct VerifyResponse {
+    pub valid: bool,
+    pub message: String,
+    pub pubkey: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SendTokenAccountInfo {
+    pub pubkey: String,
+    #[serde(rename = "isSigner")]
+    pub is_signer: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SendTokenResponse {
+    pub program_id: String,
+    pub accounts: Vec<SendTokenAccountInfo>,
     pub instruction_data: String,
 }

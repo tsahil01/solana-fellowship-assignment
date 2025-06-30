@@ -3515,8 +3515,10 @@ dependencies = [
  "bs58 0.5.1",
  "poem",
  "serde",
+ "serde_json",
  "solana-client",
  "solana-sdk",
+ "spl-associated-token-account",
  "spl-token",
  "tokio",
 ]
