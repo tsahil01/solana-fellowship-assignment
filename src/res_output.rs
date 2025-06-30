@@ -50,3 +50,17 @@ pub struct TokenCreateResponse {
     pub accounts: Vec<AccountInfo>,
     pub instruction_data: String,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct SignResponse {
+    pub signature: String,
+    pub public_key: String,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SendSolResponse {
+    pub program_id: String,
+    pub accounts: Vec<AccountInfo>,
+    pub instruction_data: String,
+}

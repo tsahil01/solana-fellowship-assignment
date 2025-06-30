@@ -8,13 +8,13 @@ use solana_sdk::{
     pubkey::Pubkey,
     instruction::{Instruction, AccountMeta},
 };
-use std::str::FromStr;
+use std::{mem, str::FromStr};
 use spl_token::instruction as token_instruction;
 use bs58;
 use serde::Serialize;
 use base64;
 
-use crate::res_output::{SuccessResponse, KeyPairResponse, TokenCreateResponse, AccountInfo};
+use crate::{res_input::{SendSolRequest, SignRequest}, res_output::{AccountInfo, KeyPairResponse, SendSolResponse, SignResponse, SuccessResponse, TokenCreateResponse}};
 use crate::res_input::{CreateTokenRequest, MintTokenRequest};
 
 mod res_output;
@@ -97,12 +97,70 @@ async fn mint_token(req: Json<MintTokenRequest>) -> Result<Json<SuccessResponse<
     Ok(Json(SuccessResponse::new(response)))
 }
 
+#[handler]
+async fn sign(req: Json<SignRequest>) -> Result<Json<SuccessResponse<SignResponse>>> {
+    let message = &req.message;
+    let secret = &req.secret;
+
+    let keypair = Keypair::from_base58_string(&secret);
+
+    let signature = keypair.sign_message(message.as_bytes());
+
+    let response = SignResponse {
+        signature: signature.to_string(),
+        public_key: keypair.pubkey().to_string(),
+        message: message.clone(),
+    };
+
+    Ok(Json(SuccessResponse::new(response)))
+}
+
+#[handler]
+async fn send_sol(req: Json<SendSolRequest>) -> Result<Json<SuccessResponse<SendSolResponse>>> {
+    if req.lamports == 0 {
+        return Err(poem::Error::from_string(
+            "lamports cant be 0",
+            poem::http::StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let from = Pubkey::from_str(&req.from)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+    let to = Pubkey::from_str(&req.to)
+        .map_err(|e| poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST))?;
+
+    if from == to {
+        return Err(poem::Error::from_string(
+            "from and to cant be the same",
+            poem::http::StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let instruction = solana_sdk::system_instruction::transfer(&from, &to, req.lamports);
+
+    let accounts: Vec<AccountInfo> = instruction.accounts.iter().map(|acc| AccountInfo {
+        pubkey: acc.pubkey.to_string(),
+        is_signer: acc.is_signer,
+        is_writable: acc.is_writable,
+    }).collect();
+
+    let response = SendSolResponse {
+        program_id: instruction.program_id.to_string(),
+        accounts,
+        instruction_data: base64::encode(instruction.data),
+    };
+
+    Ok(Json(SuccessResponse::new(response)))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     let app = Route::new()
         .at("/keypair", post(handle_keypair))
         .at("/token/create", post(create_token))
-        .at("/token/mint", post(mint_token));
+        .at("/token/mint", post(mint_token))
+        .at("/message/sign", post(sign))
+        .at("/send/sol", post(send_sol));
 
     Server::new(TcpListener::bind("127.0.0.1:3000"))
         .name("hello-world")
